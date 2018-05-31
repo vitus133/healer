@@ -25,12 +25,15 @@ def get_cell_status(uuid):
     return status
 
 
+
 def get_cells():
     url = 'http://{ip}:8080/api/v1/net-item/'.format(ip=be)
     resp = json.loads(requests.get(url=url).text)
     rv = {}
     for result in resp['results']:
-        rv[result['uuid']] = get_cell_status(result['uuid'])
+        rv[result['uuid']] = {}
+        rv[result['uuid']]['status'] = get_cell_status(result['uuid'])
+        rv[result['uuid']]['name'] = result['description']
     return rv        
 
 op_ctl = {
@@ -102,12 +105,12 @@ if __name__ == '__main__':
                     phb = ', prohibited'
                 else:
                     phb = ''
-                logger.info('Cell {uuid}, {st}{phb}'.format(
-                    uuid=key.split('-')[0], 
-                    st=cells[key], phb=phb ))
-                if cells[key] == 'STARTED' and key in prohibited_cells:
+                logger.info('Cell {name}, {st}{phb}'.format(
+                    name=cells[key]['name'], 
+                    st=cells[key]['status'], phb=phb ))
+                if cells[key]['status'] == 'STARTED' and key in prohibited_cells:
                     prohibited_cells.remove(key)
-                if cells[key] == 'FAILED' and key not in prohibited_cells:
+                if cells[key]['status'] == 'FAILED' and key not in prohibited_cells:
                     logger.info('Restarting cell {key}'.format(key=key.split('-')[0]))
                     retries = MAX_RETRIES
                     while retries > 0:
