@@ -2,13 +2,11 @@
 import json, requests
 import time
 from datetime import datetime
-from infrastructure import get_logger
+from infrastructure import get_logger, get_config
 
 logger = get_logger()
+config = get_config()
 
-be = '192.168.16.48'
-
-MAX_RETRIES = 3
 
 # Check which cells are available in the BE.
 # If a cell is in failed state - restart it up to MAX_RETRIES times
@@ -19,15 +17,18 @@ MAX_RETRIES = 3
 #       will be un-prohibited
 
 def get_cell_status(uuid):
-    url = 'http://{ip}:8080/api/v1/net-item/{uuid}/status'.format(
-            ip=be, uuid=uuid)
+    url = 'http://{ip}:{port}/api/v1/net-item/{uuid}/status'.format(
+            ip=config['BACKEND']['ipv4'], 
+            port=config['BACKEND']['port'], uuid=uuid)
     status = json.loads(requests.get(url=url).text)['current_status'].upper()
     return status
 
 
 
 def get_cells():
-    url = 'http://{ip}:8080/api/v1/net-item/'.format(ip=be)
+    url = 'http://{ip}:{port}/api/v1/net-item/'.format(
+        ip=config['BACKEND']['ipv4'], 
+        port=config['BACKEND']['port'])
     resp = json.loads(requests.get(url=url).text)
     rv = {}
     for result in resp['results']:
@@ -40,17 +41,19 @@ op_ctl = {
     'stop': {
         'transitional': 'STOPPING',
         'final': 'STOPPED',
-        'timeout': 40
+        'timeout': config['TIMERS']['stop']
     },
     'start': {
         'transitional': 'STARTING',
         'final': 'STARTED',
-        'timeout': 300
+        'timeout': config['TIMERS']['start']
     }
 }
 def cell_operation(uuid, operation):
-    oper = 'http://{ip}:8080/api/v1/net-item/{uuid}/{op}/'.format(
-            ip=be, uuid=uuid, op=operation)
+    oper = 'http://{ip}:{port}/api/v1/net-item/{uuid}/{op}/'.format(
+        ip=config['BACKEND']['ipv4'], 
+        port=config['BACKEND']['port'], 
+        uuid=uuid, op=operation)
     started = time.time()
     timeout = op_ctl[operation]['timeout']
     logger.info('Initiating cell {id} {op}, timeout {to}'.format(
@@ -65,8 +68,9 @@ def cell_operation(uuid, operation):
             logger.info('Checking cell {id} status: {status}'.format(
                 id=uuid.split('-')[0], status=status))
             if status == op_ctl[operation]['transitional']:
-                logger.info('Sleeping 10 sec')
-                time.sleep(10)
+                logger.info('Sleeping {sleep} sec'.format(
+                    sleep=config['TIMERS']['in_healing_status_check']))
+                time.sleep(config['TIMERS']['in_healing_status_check'])
             elif status == 'FAILED':
                 ret['result'] = 'failure'
                 ret['message'] = 'stratus {op} failed'.format(op=operation)
@@ -91,7 +95,7 @@ def cell_operation(uuid, operation):
             uuid=uuid.split('-')[0], rc=resp, op=operation, text=http_resp.text) )
         ret['result'] = 'failure'
         ret['message'] = 'http response {rc}'.format(rc=resp)
-        time.sleep(30)
+        time.sleep(config['TIMERS']['net_item_invalid_response'])
         return ret
 
 
@@ -112,7 +116,7 @@ if __name__ == '__main__':
                     prohibited_cells.remove(key)
                 if cells[key]['status'] == 'FAILED' and key not in prohibited_cells:
                     logger.info('Restarting cell {key}'.format(key=key.split('-')[0]))
-                    retries = MAX_RETRIES
+                    retries = config['COUNTERS']['healing_retries']
                     while retries > 0:
                         retries -= 1
                         status = cell_operation(key, 'stop')
@@ -134,7 +138,8 @@ if __name__ == '__main__':
                             uuid=key.split('-')[0]
                         ))
 
-            time.sleep(30)
-            logger.info('--- slept 30 sec ---')
+            time.sleep(config['TIMERS']['cells_polling'])
+            logger.info('--- slept {sleep} sec ---'.format(
+                sleep=config['TIMERS']['cells_polling']))
         except KeyboardInterrupt:
             exit(0)

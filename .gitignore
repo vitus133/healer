@@ -1,2 +1,8 @@
 __pycache__
 *.log
+.vscode/
+Python-3.6.5/
+environment/
+healer.conf
+venv/
+
