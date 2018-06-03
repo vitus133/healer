@@ -1,5 +1,6 @@
 #!/bin/python3
-import json, requests
+import json
+import requests
 import time
 from datetime import datetime
 from infrastructure import get_logger, get_config
@@ -10,32 +11,36 @@ logger = get_logger(config['LOGGER'])
 
 # Check which cells are available in the BE.
 # If a cell is in failed state - restart it up to MAX_RETRIES times
-# Each retry is composed from stop and start with their correspondent timeouts
+# Each retry is composed from stop and start with their
+#  correspondent timeouts
 # If stop failed, it also counts towards maximum attempts
-# After maximum healing attempts is reached, further healing attempts are prohibited.
-# Every cell that reached "Started" state (by manual fixing), if it was prohibited,
-#       will be un-prohibited
+# After maximum healing attempts is reached, further healing
+#  attempts are prohibited.
+# Every cell that reached "Started" state (by manual fixing),
+#  if it was prohibited, will be un-prohibited
+
 
 def get_cell_status(uuid):
     url = 'http://{ip}:{port}/api/v1/net-item/{uuid}/status'.format(
-            ip=config['BACKEND']['ipv4'], 
+            ip=config['BACKEND']['ipv4'],
             port=config['BACKEND']['port'], uuid=uuid)
     while True:
         try:
-            status = json.loads(requests.get(url=url).text)['current_status'].upper()
+            status = json.loads(
+                requests.get(url=url).text)['current_status'].upper()
             return status
         except Exception as e:
-            logger.warning('Exception while getting cell status: {e}'.format(e=str(e)))
+            logger.warning(
+                'Exception while getting cell status: {e}'.format(
+                    e=str(e)))
             time.sleep(config['TIMERS']['cells_polling'])
             logger.info('--- slept {sleep} sec ---'.format(
                 sleep=config['TIMERS']['cells_polling']))
 
 
-
-
 def get_cells():
     url = 'http://{ip}:{port}/api/v1/net-item/'.format(
-        ip=config['BACKEND']['ipv4'], 
+        ip=config['BACKEND']['ipv4'],
         port=config['BACKEND']['port'])
     while True:
         try:
@@ -46,12 +51,13 @@ def get_cells():
                 rv[result['uuid']]['status'] = get_cell_status(result['uuid'])
                 rv[result['uuid']]['name'] = result['description']
             return rv
-        except  Exception as e:
-            logger.warning('Exception while getting cells from BE: {e}'.format(e=str(e)))
+        except Exception as e:
+            logger.warning(
+                'Exception while getting cells from BE: {e}'.format(e=str(e)))
             time.sleep(config['TIMERS']['cells_polling'])
             logger.info('--- slept {sleep} sec ---'.format(
                 sleep=config['TIMERS']['cells_polling']))
-            
+
 
 op_ctl = {
     'stop': {
@@ -65,10 +71,12 @@ op_ctl = {
         'timeout': config['TIMERS']['start']
     }
 }
+
+
 def cell_operation(uuid, operation):
     oper = 'http://{ip}:{port}/api/v1/net-item/{uuid}/{op}/'.format(
-        ip=config['BACKEND']['ipv4'], 
-        port=config['BACKEND']['port'], 
+        ip=config['BACKEND']['ipv4'],
+        port=config['BACKEND']['port'],
         uuid=uuid, op=operation)
     started = time.time()
     timeout = op_ctl[operation]['timeout']
@@ -115,8 +123,11 @@ def cell_operation(uuid, operation):
             ret['message'] = 'timeout'
             return ret
     else:
-        logger.info('Can\'t {op} net item {uuid}, return code {rc} text {text}'.format(
-            uuid=uuid.split('-')[0], rc=resp, op=operation, text=http_resp.text) )
+        logger.info(
+            'Can\'t {op} net item {uuid}, return code {rc} text {text}'.format(
+                uuid=uuid.split('-')[0],
+                rc=resp, op=operation,
+                text=http_resp.text))
         ret['result'] = 'failure'
         ret['message'] = 'http response {rc}'.format(rc=resp)
         time.sleep(config['TIMERS']['net_item_invalid_response'])
@@ -134,33 +145,44 @@ if __name__ == '__main__':
                 else:
                     phb = ''
                 logger.info('Cell {name}, {st}{phb}'.format(
-                    name=cells[key]['name'], 
-                    st=cells[key]['status'], phb=phb ))
+                    name=cells[key]['name'],
+                    st=cells[key]['status'], phb=phb))
                 if cells[key]['status'] == 'STARTED' and key in prohibited_cells:
                     prohibited_cells.remove(key)
                 if cells[key]['status'] == 'FAILED' and key not in prohibited_cells:
-                    logger.info('Restarting cell {key}'.format(key=key.split('-')[0]))
+                    logger.info(
+                        'Restarting cell {key}'.format(
+                            key=key.split('-')[0]))
                     retries = config['COUNTERS']['healing_retries']
                     while retries > 0:
                         retries -= 1
                         status = cell_operation(key, 'stop')
                         if status['result'] != 'success':
-                            logger.info('Stop failed with message \"{message}\". Remained {retries} retries'.format(
-                                message=status['message'], retries=retries))
+                            logger.info(
+                                'Stop failed with message \"{message}\". \
+                                Remained {retries} retries'.format(
+                                    message=status['message'],
+                                    retries=retries))
                             continue
                         status = cell_operation(key, 'start')
                         if status['result'] != 'success':
-                            logger.info('Start failed with message \"{message}\". Remained {retries} retries'.format(
-                                message=status['message'], retries=retries))
+                            logger.info(
+                                'Start failed with message \"{message}\". \
+                                Remained {retries} retries'.format(
+                                    message=status['message'],
+                                    retries=retries))
                             continue
                         else:
-                            logger.info('Successfully recovered cell {key}'.format(key=key.split('-')[0]))
+                            logger.info(
+                                'Successfully recovered cell {key}'.format(
+                                    key=key.split('-')[0]))
                             break
                     if retries <= 0:
                         prohibited_cells.append(key)
-                        logger.info('Prohibited cell {uuid} from additional healing attempts'.format(
-                            uuid=key.split('-')[0]
-                        ))
+                        logger.info(
+                            'Prohibited cell {uuid} from additional \
+                            healing attempts'.format(
+                                uuid=key.split('-')[0]))
 
             time.sleep(config['TIMERS']['cells_polling'])
             logger.info('--- slept {sleep} sec ---'.format(
