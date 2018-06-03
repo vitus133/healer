@@ -9,8 +9,7 @@ def get_logger(config):
     logger = logging.getLogger(config['logger_name'])
     logger.setLevel(config['gen_level'])
     formatter = logging.Formatter(
-        '%(name)s %(asctime)s %(levelname)s \
-        [%(filename)s:%(lineno)s]: %(message)s',
+        '%(name)s %(asctime)s %(levelname)s [%(filename)s:%(lineno)s]: %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S')
 
     # logging to file
