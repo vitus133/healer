@@ -20,8 +20,16 @@ def get_cell_status(uuid):
     url = 'http://{ip}:{port}/api/v1/net-item/{uuid}/status'.format(
             ip=config['BACKEND']['ipv4'], 
             port=config['BACKEND']['port'], uuid=uuid)
-    status = json.loads(requests.get(url=url).text)['current_status'].upper()
-    return status
+    while True:
+        try:
+            status = json.loads(requests.get(url=url).text)['current_status'].upper()
+            return status
+        except Exception as e:
+            logger.warning('Exception while getting cell status: {e}'.format(e=str(e)))
+            time.sleep(config['TIMERS']['cells_polling'])
+            logger.info('--- slept {sleep} sec ---'.format(
+                sleep=config['TIMERS']['cells_polling']))
+
 
 
 
@@ -29,13 +37,21 @@ def get_cells():
     url = 'http://{ip}:{port}/api/v1/net-item/'.format(
         ip=config['BACKEND']['ipv4'], 
         port=config['BACKEND']['port'])
-    resp = json.loads(requests.get(url=url).text)
-    rv = {}
-    for result in resp['results']:
-        rv[result['uuid']] = {}
-        rv[result['uuid']]['status'] = get_cell_status(result['uuid'])
-        rv[result['uuid']]['name'] = result['description']
-    return rv        
+    while True:
+        try:
+            resp = json.loads(requests.get(url=url).text)
+            rv = {}
+            for result in resp['results']:
+                rv[result['uuid']] = {}
+                rv[result['uuid']]['status'] = get_cell_status(result['uuid'])
+                rv[result['uuid']]['name'] = result['description']
+            return rv
+        except  Exception as e:
+            logger.warning('Exception while getting cells from BE: {e}'.format(e=str(e)))
+            time.sleep(config['TIMERS']['cells_polling'])
+            logger.info('--- slept {sleep} sec ---'.format(
+                sleep=config['TIMERS']['cells_polling']))
+            
 
 op_ctl = {
     'stop': {
@@ -60,7 +76,15 @@ def cell_operation(uuid, operation):
         id=uuid.split('-')[0], op=operation, to=timeout))
     ret = {}
     ret['uuid'] = uuid
-    http_resp = requests.post(url=oper, auth=('admin', 'qwer1234'))
+    try:
+        http_resp = requests.post(url=oper, auth=('admin', 'qwer1234'))
+    except Exception as e:
+        ret['result'] = 'failure'
+        ret['message'] = 'Stratus {op} failed due to exception {e}'.format(
+            op=operation, e=str(e))
+        logger.warning('Stratus {op} failed due to exception {e}'.format(
+            op=operation, e=str(e)))
+        return ret
     resp = http_resp.status_code
     if resp == 202:
         while time.time() - started < timeout:
