@@ -4,9 +4,9 @@ import time
 from datetime import datetime
 from infrastructure import get_logger, get_config
 
-logger = get_logger()
-config = get_config()
 
+config = get_config()
+logger = get_logger(config['LOGGER'])
 
 # Check which cells are available in the BE.
 # If a cell is in failed state - restart it up to MAX_RETRIES times
